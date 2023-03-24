@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, status, Response
 from pydantic import BaseModel
 from typing import Union
+import statistics
 
 import sqlite3
 
@@ -19,6 +20,7 @@ class Restaurant(BaseModel):
     lat: float
     lng: float
 
+
 class updateRestaurant(BaseModel):
     rating: Union[int, None] = None
     name: Union[str, None] = None
@@ -34,8 +36,11 @@ class updateRestaurant(BaseModel):
 
 app = FastAPI()
 
-
-@app.get("/restaurant")
+# We only adapt our function te query by ID, rating, or State.
+# If we wanted to add more params the it would be easy but we'd have
+# to add and if statement for each one of them making the code a bit more
+# verbose. 
+@app.get("/restaurants")
 async def read(id: Union[str, None] = None, rating: Union[int, None] = None,
                state: Union[str, None] = None):
 
@@ -51,7 +56,7 @@ async def read(id: Union[str, None] = None, rating: Union[int, None] = None,
     p = " AND ".join(l)
     query_str = base_str.format(p) if ((id != None) or (rating != None) or (state != None)) else "SELECT * FROM Restaurants"
 
-    
+    print("lol")
 
     conn = sqlite3.connect("../restaurantes.db")
 
@@ -72,8 +77,9 @@ async def read(id: Union[str, None] = None, rating: Union[int, None] = None,
     
 
     return {"result": r}
-        
-@app.post("/restaurant",status_code=201)
+
+# Simple function, really nothing fancy going on here
+@app.post("/restaurants",status_code=201)
 async def create(restaurant: Restaurant, response: Response):
     try:
         conn = sqlite3.connect("../restaurantes.db")
@@ -90,31 +96,15 @@ async def create(restaurant: Restaurant, response: Response):
     finally:
         conn.close()
 
-    response.headers["Location"] = "/restaurant" + restaurant.id
+    # In theory we should return a location header like below,
+    # but it will clash with /restaurants/statistics endpoint
+    #response.headers["Location"] = "/restaurants/" + restaurant.id
     
     return {"result": restaurant}
 
 
-@app.get("/restaurant/{id}")
-async def details(id):
-
-    conn = sqlite3.connect("../restaurantes.db")
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM Restaurants WHERE id="{}"'.format(id))
-
-    res = cursor.fetchall()
-
-    conn.close()
-
-    if len(res) < 1:
-        raise HTTPException(status_code=404, detail="No such restaurant")
-
-    d =  dict(zip(fields,res[0]))
-    r = [Restaurant.parse_obj(d).json()]
-
-    return {"result": r}
-
-@app.delete("/restaurant/{id}",status_code=204)
+# Again, very simple function. Nothing complicated happening here
+@app.delete("/restaurants/{id}",status_code=204)
 async def delete(id):
 
     try:
@@ -129,7 +119,10 @@ async def delete(id):
 
     return
 
-@app.patch("/restaurant/{id}",status_code=204)
+# Here we use the class updateRestaurant defined before
+# this give us the possibility of only accepting some
+# parameters (the ones we want to update) instead of all of them
+@app.patch("/restaurants/{id}",status_code=204)
 async def put(id: str, restaurant: updateRestaurant):
     update_data = restaurant.dict(exclude_unset=True)
     base_str = 'UPDATE Restaurants SET {fields} WHERE id="{id}"'
@@ -151,6 +144,29 @@ async def put(id: str, restaurant: updateRestaurant):
         conn.close()
 
     return
-        
+
+
+# We use package spatialite, sqlite3 geo extansion to
+# make geographic queries
+@app.get("/restaurants/statistics")
+async def busca(latitud: float, longitud: float, radius: float):
     
+    r = []
+    conn = sqlite3.connect("../restaurantes.db")
+    conn.enable_load_extension(True)
+    conn.load_extension("mod_spatialite")
+    query_str = "SELECT rating  FROM Restaurants WHERE Distance( ST_POINT(lat,lng), ST_POINT({lat},{lng}), TRUE) <= {rad};".format(lat=latitud,lng=longitud,rad=radius)
+    cursor = conn.cursor()
+    cursor.execute(query_str)
+
+    res = cursor.fetchall()
+
+    conn.close()
+
     
+    if len(res) < 1:
+        raise HTTPException(status_code=404, detail="No such restaurant")
+
+
+    r = [x[0] for x in res]
+    return {"result": {"count": len(r), "avg": statistics.mean(r), "std": statistics.stdev(r)}}
