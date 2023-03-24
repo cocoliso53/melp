@@ -20,7 +20,7 @@ COPY ./app /app
 RUN python popscript.py
 
 # Expose the FastAPI port
-EXPOSE 8000
+EXPOSE 80
 
 # Start the FastAPI application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "80"]
