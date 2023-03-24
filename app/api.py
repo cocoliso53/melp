@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, status, Response
 from pydantic import BaseModel
 from typing import Union
+import pandas as pd
 import statistics
 
 import sqlite3
@@ -56,9 +57,7 @@ async def read(id: Union[str, None] = None, rating: Union[int, None] = None,
     p = " AND ".join(l)
     query_str = base_str.format(p) if ((id != None) or (rating != None) or (state != None)) else "SELECT * FROM Restaurants"
 
-    print("lol")
-
-    conn = sqlite3.connect("../restaurantes.db")
+    conn = sqlite3.connect("/app/restaurantes.db")
 
     cursor = conn.cursor()
     cursor.execute(query_str)
@@ -82,7 +81,7 @@ async def read(id: Union[str, None] = None, rating: Union[int, None] = None,
 @app.post("/restaurants",status_code=201)
 async def create(restaurant: Restaurant, response: Response):
     try:
-        conn = sqlite3.connect("../restaurantes.db")
+        conn = sqlite3.connect("/app/restaurantes.db")
         print(tuple(restaurant.dict().values()))
         conn.execute('''INSERT INTO Restaurants
                  (id, rating, name, site, email, phone, street, city, state, lat, lng)
@@ -108,12 +107,12 @@ async def create(restaurant: Restaurant, response: Response):
 async def delete(id):
 
     try:
-        conn = sqlite3.connect("../restaurantes.db")
+        conn = sqlite3.connect("/app/restaurantes.db")
         cursor = conn.cursor()
         cursor.execute('DELETE FROM Restaurants WHERE id="{}"'.format(id))
         conn.commit()
     except sqlite3.Error as e:
-        raise HTTPEXception(stauts_code=400, detail=e.args[0])
+        raise HTTPException(stauts_code=400, detail=e.args[0])
     finally:
         conn.close()
 
@@ -134,7 +133,7 @@ async def put(id: str, restaurant: updateRestaurant):
     query_str = base_str.format(fields=field_str,id=id)
 
     try:
-        conn = sqlite3.connect("../restaurantes.db")
+        conn = sqlite3.connect("/app/restaurantes.db")
         cursor = conn.cursor()
         cursor.execute(query_str)
         conn.commit()
@@ -152,7 +151,7 @@ async def put(id: str, restaurant: updateRestaurant):
 async def busca(latitud: float, longitud: float, radius: float):
     
     r = []
-    conn = sqlite3.connect("../restaurantes.db")
+    conn = sqlite3.connect("/app/restaurantes.db")
     conn.enable_load_extension(True)
     conn.load_extension("mod_spatialite")
     query_str = "SELECT rating  FROM Restaurants WHERE Distance( ST_POINT(lat,lng), ST_POINT({lat},{lng}), TRUE) <= {rad};".format(lat=latitud,lng=longitud,rad=radius)
